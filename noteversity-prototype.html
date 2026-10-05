@@ -768,6 +768,12 @@
 // production) — API calls, cookies, and downloads are all same-origin.
 const API_BASE = '';
 
+/* Fetch with a hard timeout — a frozen serverless instance must turn into a
+   retryable error instead of hanging the boot screen forever. */
+function fetchWithTimeout(url, opts = {}, ms = 12000) {
+  return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
+}
+
 function safeGet(k) {
   try { return localStorage.getItem(k) || ''; } catch (e) { return ''; }
 }
@@ -921,7 +927,7 @@ async function fetchNotes(){
     if(notesFilter !== "All") url += `subject=${encodeURIComponent(notesFilter)}&`;
     if(notesSearch) url += `search=${encodeURIComponent(notesSearch)}&`;
 
-    let res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+    let res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
     // 401 = session recovery, 503 = cold database — both get one retry instead
     // of leaving a stuck skeleton (which looked like "half the PDFs missing").
     if (res.status === 401 || res.status === 503) {
@@ -930,7 +936,7 @@ async function fetchNotes(){
       } else {
         await new Promise(r => setTimeout(r, 1200));
       }
-      res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+      res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
     }
     if(res.ok){
       notes = await res.json();
@@ -939,7 +945,7 @@ async function fetchNotes(){
       updateTotalResStat();
     } else if (res.status === 401) {
       await refreshGuestSession();
-      const retryRes = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+      const retryRes = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
       if (retryRes.ok) {
         notes = await retryRes.json();
         renderNotes();
@@ -997,14 +1003,14 @@ async function fetchPyqs(){
     if(pyqFilter !== "All") url += `subject=${encodeURIComponent(pyqFilter)}&`;
     if(pyqSearch) url += `search=${encodeURIComponent(pyqSearch)}&`;
 
-    let res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+    let res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
     if (res.status === 401 || res.status === 503) {
       if (res.status === 401) {
         await refreshGuestSession();
       } else {
         await new Promise(r => setTimeout(r, 1200));
       }
-      res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+      res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
     }
     if(res.ok){
       pyqs = await res.json();
@@ -1013,7 +1019,7 @@ async function fetchPyqs(){
       updateTotalResStat();
     } else if (res.status === 401) {
       await refreshGuestSession();
-      const retryRes = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+      const retryRes = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
       if (retryRes.ok) {
         pyqs = await retryRes.json();
         renderPyqs();
@@ -1753,7 +1759,7 @@ async function fetchSessionUser() {
   for (let attempt = 0; attempt < 2; attempt++) {
     let res;
     try {
-      res = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' });
+      res = await fetchWithTimeout(`${API_BASE}/api/auth/me`, { credentials: 'include' });
     } catch (err) {
       if (attempt === 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
       throw err;
@@ -1784,10 +1790,10 @@ async function refreshGuestSession() {
         populateUserUI();
         return currentUser;
       }
-      let res = await fetch(`${API_BASE}/api/auth/guest-session`, { method: 'POST', credentials: 'include' });
+      let res = await fetchWithTimeout(`${API_BASE}/api/auth/guest-session`, { method: 'POST', credentials: 'include' });
       if (!res.ok) {
         await new Promise(r => setTimeout(r, 1000));
-        res = await fetch(`${API_BASE}/api/auth/guest-session`, { method: 'POST', credentials: 'include' });
+        res = await fetchWithTimeout(`${API_BASE}/api/auth/guest-session`, { method: 'POST', credentials: 'include' });
       }
       if (!res.ok) throw new Error('Guest session failed');
       const data = await res.json();
