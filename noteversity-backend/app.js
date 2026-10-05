@@ -23,6 +23,18 @@ const app = express();
 
 // Trust the reverse proxy (Vercel / local tunnels) so req.ip is the real client
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+// Security headers — set in the app itself so they apply on every host,
+// regardless of platform-level header configuration (mirrors vercel.json).
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-src 'self' about:; frame-ancestors 'self'; object-src 'self'; base-uri 'self'; form-action 'self'");
+  next();
+});
 
 const corsOptions = {
   origin: true,
