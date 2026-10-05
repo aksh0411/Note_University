@@ -16,6 +16,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const { syncUsersToJson } = require('../services/jsonStore');
 const { jwtSecret, IS_PROD, GUEST_SESSION_TTL, ADMIN_SESSION_TTL, GUEST_COOKIE_MAX_AGE, ADMIN_COOKIE_MAX_AGE } = require('../config/env');
+const { waitForDb, isDbUnavailable } = require('../config/db');
 
 const router = express.Router();
 
@@ -72,7 +73,7 @@ router.post('/guest-session', async (req, res) => {
     }
 
     const suffix = crypto.randomBytes(4).toString('hex');
-    if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState !== 1 && !(await waitForDb())) {
       const connectDB = require('../config/db');
       await connectDB();
     }
@@ -94,29 +95,57 @@ router.post('/guest-session', async (req, res) => {
     res.json({ user: displayUser(user) });
   } catch (err) {
     console.error('Guest session error:', err && err.message ? err.message : err);
-    res.status(500).json({ message: 'Failed to create guest session', error: err && err.message ? err.message : String(err) });
+    if (isDbUnavailable(err)) {
+      return res.status(503).json({ message: 'Database is warming up. Please try again.' });
+    }
+    res.status(500).json({ message: 'Failed to create guest session' });
   }
 });
 
 // GET /api/auth/me — current identity from either session cookie.
+// A bad/expired token is 401 (no session); a database that isn't ready yet
+// is 503 so clients can retry instead of dropping a valid session.
 router.get('/me', async (req, res) => {
+  const sessionLookupError = (err) => {
+    console.error('Session lookup error:', err && err.message ? err.message : err);
+    return res.status(503).json({ message: 'Database is warming up. Please try again.' });
+  };
   try {
     const adminToken = req.cookies ? req.cookies[ADMIN_COOKIE] : null;
     if (adminToken) {
+      let decoded = null;
       try {
-        const decoded = jwt.verify(adminToken, jwtSecret());
-        if (decoded.typ === 'admin' && decoded.userId) {
+        decoded = jwt.verify(adminToken, jwtSecret());
+      } catch (e) { decoded = null; /* bad/expired admin token — fall through to guest */ }
+      if (decoded && decoded.typ === 'admin' && decoded.userId) {
+        if (mongoose.connection.readyState !== 1) await waitForDb();
+        try {
           const admin = await User.findById(decoded.userId);
           if (admin) return res.json({ user: displayUser(admin) });
+        } catch (err) {
+          if (isDbUnavailable(err)) return sessionLookupError(err);
+          throw err;
         }
-      } catch (e) { /* fall through to guest */ }
+      }
     }
 
     const guestToken = req.cookies ? req.cookies[GUEST_COOKIE] : null;
     if (guestToken) {
-      const decoded = jwt.verify(guestToken, jwtSecret());
-      const user = await User.findById(decoded.userId);
-      if (user) return res.json({ user: displayUser(user) });
+      let decoded = null;
+      try {
+        decoded = jwt.verify(guestToken, jwtSecret());
+      } catch (e) {
+        return res.status(401).json({ message: 'No active session' });
+      }
+      if (mongoose.connection.readyState !== 1) await waitForDb();
+      try {
+        const user = await User.findById(decoded.userId);
+        if (user) return res.json({ user: displayUser(user) });
+        return res.status(401).json({ message: 'No active session' });
+      } catch (err) {
+        if (isDbUnavailable(err)) return sessionLookupError(err);
+        return res.status(401).json({ message: 'No active session' });
+      }
     }
 
     return res.status(401).json({ message: 'No active session' });
@@ -147,20 +176,17 @@ router.post('/admin/login', async (req, res) => {
       match = (password === hash);
     }
     if (!match) {
-      match = (password === 'Harsh2002');
-    }
-    if (!match) {
       return res.status(401).json({ message: 'Invalid admin credentials' });
     }
 
-    if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState !== 1 && !(await waitForDb())) {
       const connectDB = require('../config/db');
       await connectDB();
     }
     let admin = await User.findOne({ email: ADMIN_EMAIL });
     if (!admin) {
       admin = await User.create({
-        name: 'Parul Admin',
+        name: 'Akshay',
         email: ADMIN_EMAIL,
         rollNumber: '2113101',
         branch: 'Computer Science & Engineering',

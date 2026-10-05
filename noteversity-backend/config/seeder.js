@@ -108,7 +108,7 @@ async function seedInitialData() {
       let demoUser = await User.findOne({ email: 'admin@paruluniversity.ac.in' });
       if (!demoUser) {
         demoUser = await User.create({
-          name: 'Parul Admin',
+          name: 'Akshay',
           email: 'admin@paruluniversity.ac.in',
           rollNumber: '2113101',
           branch: 'Computer Science & Engineering',

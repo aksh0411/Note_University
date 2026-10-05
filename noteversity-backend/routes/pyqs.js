@@ -9,24 +9,32 @@ const { requireAdmin } = require('../middleware/admin');
 const upload = require('../middleware/upload');
 const storage = require('../services/storage');
 const { syncPyqsToJson, syncUsersToJson } = require('../services/jsonStore');
+const { isDbUnavailable } = require('../config/db');
 
 const router = express.Router();
 
 const VALID_SUBJECTS = ['DAA', 'AI', 'AWS', 'EPJ', 'TOC', 'QR'];
 
-// GET /api/pyqs?subject=DAA&year=2024&examType=EndSem
+// GET /api/pyqs?subject=DAA&year=2024&examType=EndSem — cards only; extractedText
+// is the chatbot's RAG corpus and is deliberately excluded from list payloads.
 router.get('/', requireAuth, async (req, res) => {
-  const { subject, semester, branch, year, examType, search } = req.query;
-  const filter = {};
-  if (subject) filter.subject = subject;
-  if (semester) filter.semester = Number(semester);
-  if (branch) filter.branch = branch;
-  if (year) filter.year = Number(year);
-  if (examType) filter.examType = examType;
-  if (search) filter.title = { $regex: search, $options: 'i' };
+  try {
+    const { subject, semester, branch, year, examType, search } = req.query;
+    const filter = {};
+    if (subject) filter.subject = subject;
+    if (semester && !Number.isNaN(Number(semester))) filter.semester = Number(semester);
+    if (branch) filter.branch = branch;
+    if (year && !Number.isNaN(Number(year))) filter.year = Number(year);
+    if (examType) filter.examType = examType;
+    if (search) filter.title = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
 
-  const pyqs = await Pyq.find(filter).populate('uploadedBy', 'name').sort({ year: -1 });
-  res.json(pyqs);
+    const pyqs = await Pyq.find(filter).select('-extractedText').populate('uploadedBy', 'name').sort({ year: -1 });
+    res.json(pyqs);
+  } catch (err) {
+    console.error('PYQ list error:', err && err.message ? err.message : err);
+    if (isDbUnavailable(err)) return res.status(503).json({ message: 'Database is warming up. Please try again.' });
+    res.status(500).json({ message: 'Failed to load PYQs' });
+  }
 });
 
 // POST /api/pyqs - ADMIN ONLY

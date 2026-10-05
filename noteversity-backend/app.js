@@ -10,7 +10,6 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const cookieParser = require('cookie-parser');
-const mongoose = require('mongoose');
 
 const requireAuth = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
@@ -68,32 +67,6 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/chat', chatRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
-
-// TEMPORARY deployment diagnostic — attempts a live connect and reports the exact result.
-app.get('/api/debug-db', async (req, res) => {
-  const out = {
-    marker: 'dbg-v3',
-    readyStateBefore: mongoose.connection.readyState,
-    mongoUriMasked: (process.env.MONGO_URI || '(MONGO_URI NOT SET)').replace(/\/\/([^:@/]+):[^@/]+@/, '//$1:***@'),
-    nodeEnv: process.env.NODE_ENV || null,
-    onVercel: !!process.env.VERCEL,
-  };
-  const t0 = Date.now();
-  try {
-    await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 });
-    out.connect = 'ok';
-    out.readyStateAfterConnect = mongoose.connection.readyState;
-    await mongoose.connection.db.admin().command({ ping: 1 });
-    out.ping = 'ok';
-    out.userCount = await mongoose.connection.collection('users').countDocuments({});
-    out.gridfsCount = await mongoose.connection.db.collection('pdfs.files').countDocuments({});
-  } catch (err) {
-    out.error = String(err.message || err).slice(0, 250);
-    out.readyStateAfterError = mongoose.connection.readyState;
-  }
-  out.ms = Date.now() - t0;
-  res.json(out);
-});
 
 // ---- Central error handler: multer problems → clean JSON 400, everything
 // else → generic JSON 500 with the stack logged server-side only ----

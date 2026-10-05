@@ -10,21 +10,30 @@ const upload = require('../middleware/upload');
 const storage = require('../services/storage');
 const { syncNotesToJson, syncUsersToJson } = require('../services/jsonStore');
 
+const { isDbUnavailable } = require('../config/db');
+
 const router = express.Router();
 
 const VALID_SUBJECTS = ['DAA', 'AI', 'AWS', 'EPJ', 'TOC', 'QR'];
 
-// GET /api/notes?subject=DAA&semester=5
+// GET /api/notes?subject=DAA&semester=5 — list cards only; extractedText is the
+// RAG corpus for the chatbot and is deliberately excluded (≈1.2MB → ~40KB).
 router.get('/', requireAuth, async (req, res) => {
-  const { subject, semester, branch, search } = req.query;
-  const filter = {};
-  if (subject) filter.subject = subject;
-  if (semester) filter.semester = Number(semester);
-  if (branch) filter.branch = branch;
-  if (search) filter.title = { $regex: search, $options: 'i' };
+  try {
+    const { subject, semester, branch, search } = req.query;
+    const filter = {};
+    if (subject) filter.subject = subject;
+    if (semester && !Number.isNaN(Number(semester))) filter.semester = Number(semester);
+    if (branch) filter.branch = branch;
+    if (search) filter.title = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
 
-  const notes = await Note.find(filter).populate('uploadedBy', 'name').sort({ createdAt: -1 });
-  res.json(notes);
+    const notes = await Note.find(filter).select('-extractedText').populate('uploadedBy', 'name').sort({ createdAt: -1 });
+    res.json(notes);
+  } catch (err) {
+    console.error('Notes list error:', err && err.message ? err.message : err);
+    if (isDbUnavailable(err)) return res.status(503).json({ message: 'Database is warming up. Please try again.' });
+    res.status(500).json({ message: 'Failed to load notes' });
+  }
 });
 
 // POST /api/notes  (multipart/form-data, field name: file) - ADMIN ONLY

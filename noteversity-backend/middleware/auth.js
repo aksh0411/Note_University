@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const { jwtSecret } = require('../config/env');
+const { waitForDb, isDbUnavailable } = require('../config/db');
 
 /**
  * Session resolution order: Authorization header (API testing) →
@@ -29,8 +31,17 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ message: 'Authentication required. Please sign in.' });
   }
 
+  // Token validity is answered locally — never confuse a bad token with a
+  // cold database (a false 401 makes clients drop a perfectly good session).
+  let decoded;
   try {
-    const decoded = jwt.verify(token, jwtSecret());
+    decoded = jwt.verify(token, jwtSecret());
+  } catch (err) {
+    return res.status(401).json({ message: 'Session expired or invalid token. Please sign in again.' });
+  }
+
+  try {
+    if (mongoose.connection.readyState !== 1) await waitForDb();
     const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(401).json({ message: 'User account no longer exists.' });
@@ -39,6 +50,9 @@ async function requireAuth(req, res, next) {
     req.user = user;
     return next();
   } catch (err) {
+    if (isDbUnavailable(err)) {
+      return res.status(503).json({ message: 'Database is warming up. Please try again.' });
+    }
     return res.status(401).json({ message: 'Session expired or invalid token. Please sign in again.' });
   }
 }

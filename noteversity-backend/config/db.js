@@ -61,4 +61,32 @@ async function connectDB() {
   }
 }
 
+/**
+ * Wait for an existing connection attempt to reach the ready state instead of
+ * racing it with a second connect() call (serverless cold starts often have a
+ * connection already in progress — readyState 2).
+ */
+async function waitForDb(maxMs = 8000) {
+  const start = Date.now();
+  while (mongoose.connection.readyState !== 1 && Date.now() - start < maxMs) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return mongoose.connection.readyState === 1;
+}
+
+/** True when a failure is "database not reachable yet" rather than bad input. */
+function isDbUnavailable(err) {
+  if (mongoose.connection.readyState !== 1) return true;
+  if (!err) return false;
+  return [
+    'MongoServerSelectionError',
+    'MongooseServerSelectionError',
+    'MongoNetworkError',
+    'MongoNetworkTimeoutError',
+    'TopologyDescriptionChangedError',
+  ].includes(err.name) || /topology|connection/i.test(err.message || '');
+}
+
 module.exports = connectDB;
+module.exports.waitForDb = waitForDb;
+module.exports.isDbUnavailable = isDbUnavailable;

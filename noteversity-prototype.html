@@ -566,7 +566,7 @@
     <div class="sidebar-user" style="cursor:pointer;" onclick="switchView('profile')" title="View profile">
       <div class="avatar" id="sidebarAvatar">AR</div>
       <div>
-        <div class="u-name" id="sidebarName">Parul Admin</div>
+        <div class="u-name" id="sidebarName">Akshay</div>
         <div class="u-sub" id="sidebarSub">CSE · Sem 5 · Parul University</div>
       </div>
     </div>
@@ -683,7 +683,7 @@
         <div class="profile-top">
           <div class="avatar" id="profileAvatar">AR</div>
           <div>
-            <div class="p-name" id="profileName">Parul Admin</div>
+            <div class="p-name" id="profileName">Akshay</div>
             <div class="p-role" id="profileRole">B.Tech CSE · Semester 5 · Roll No. 2113101</div>
           </div>
         </div>
@@ -920,8 +920,18 @@ async function fetchNotes(){
     let url = `${API_BASE}/api/notes?`;
     if(notesFilter !== "All") url += `subject=${encodeURIComponent(notesFilter)}&`;
     if(notesSearch) url += `search=${encodeURIComponent(notesSearch)}&`;
-    
-    const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+
+    let res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+    // 401 = session recovery, 503 = cold database — both get one retry instead
+    // of leaving a stuck skeleton (which looked like "half the PDFs missing").
+    if (res.status === 401 || res.status === 503) {
+      if (res.status === 401) {
+        await refreshGuestSession();
+      } else {
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+    }
     if(res.ok){
       notes = await res.json();
       renderNotes();
@@ -935,6 +945,10 @@ async function fetchNotes(){
         renderNotes();
         updateContribStat();
         updateTotalResStat();
+      } else {
+        if (!notes || notes.length === 0) {
+          document.getElementById('notesGrid').innerHTML = `<div class="empty"><div class="ic">⚠️</div>Could not load notes. Please refresh.</div>`;
+        }
       }
     } else {
       if (!notes || notes.length === 0) {
@@ -983,7 +997,15 @@ async function fetchPyqs(){
     if(pyqFilter !== "All") url += `subject=${encodeURIComponent(pyqFilter)}&`;
     if(pyqSearch) url += `search=${encodeURIComponent(pyqSearch)}&`;
 
-    const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+    let res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+    if (res.status === 401 || res.status === 503) {
+      if (res.status === 401) {
+        await refreshGuestSession();
+      } else {
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
+    }
     if(res.ok){
       pyqs = await res.json();
       renderPyqs();
@@ -997,6 +1019,10 @@ async function fetchPyqs(){
         renderPyqs();
         updateContribStat();
         updateTotalResStat();
+      } else {
+        if (!pyqs || pyqs.length === 0) {
+          document.getElementById('pyqGrid').innerHTML = `<div class="empty"><div class="ic">⚠️</div>Could not load PYQs. Please refresh.</div>`;
+        }
       }
     } else {
       if (!pyqs || pyqs.length === 0) {
@@ -1065,7 +1091,7 @@ async function downloadItem(id, title, type = 'note'){
 /* ---------------- DELETE (ADMIN ONLY) ---------------- */
 async function deleteItem(id, title, type = 'note'){
   if(!isAdmin()){
-    showToast("Access Denied: Only Admin (Parul Admin) can delete files");
+    showToast("Access Denied: Only Admin (Akshay) can delete files");
     return;
   }
   if(!confirm(`Are you sure you want to permanently delete "${title}"?`)) return;
@@ -1487,7 +1513,7 @@ function closePreview(){
 
 function openUpload(kind){
   if(!isAdmin()){
-    showToast("Access Denied: Only Admin (Parul Admin) can upload files");
+    showToast("Access Denied: Only Admin (Akshay) can upload files");
     return;
   }
   uploadKind = kind;
@@ -1567,7 +1593,7 @@ function uploadWithProgress(formData, endpoint){
 
 async function submitUpload(){
   if(!isAdmin()){
-    showToast("Access Denied: Only Admin (Parul Admin) can upload files");
+    showToast("Access Denied: Only Admin (Akshay) can upload files");
     return;
   }
   const title = document.getElementById('upTitle').value.trim() || 'Untitled upload';
@@ -1689,20 +1715,45 @@ function showBootError() {
   if (el) el.style.display = 'flex';
 }
 
-/* Ask the backend who we are (reads HttpOnly session cookies). */
+/* Ask the backend who we are (reads HttpOnly session cookies).
+   401 → no session (null). Network / 5xx (DB warming up) → one short retry,
+   then throw so callers can distinguish "not logged in" from "server hiccup"
+   instead of silently downgrading to a guest session. */
 async function fetchSessionUser() {
-  const res = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.user || null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' });
+    } catch (err) {
+      if (attempt === 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
+      throw err;
+    }
+    if (res.ok) {
+      const data = await res.json();
+      return data.user || null;
+    }
+    if (res.status === 401 || res.status === 403) return null;
+    if (attempt === 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
+    throw new Error('Session lookup failed (' + res.status + ')');
+  }
+  return null;
 }
 
-/* Deduplicated guest session refresher (shared by boot and 401 recovery) */
+/* Deduplicated session refresher (shared by boot and 401 recovery).
+   A valid session cookie (admin OR guest) always wins — only mint a guest
+   when the server explicitly says there is no session. This is what keeps an
+   admin logged in when a background request hits a cold database. */
 let guestSessionPromise = null;
 async function refreshGuestSession() {
   if (guestSessionPromise) return guestSessionPromise;
   guestSessionPromise = (async () => {
     try {
+      const existing = await fetchSessionUser();
+      if (existing) {
+        currentUser = existing;
+        populateUserUI();
+        return currentUser;
+      }
       let res = await fetch(`${API_BASE}/api/auth/guest-session`, { method: 'POST', credentials: 'include' });
       if (!res.ok) {
         await new Promise(r => setTimeout(r, 1000));
