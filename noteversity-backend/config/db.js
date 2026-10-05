@@ -28,7 +28,7 @@ async function connectDB() {
     await mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: IS_PROD ? 10000 : 2500,
       socketTimeoutMS: 45000,
-      maxPoolSize: IS_PROD ? 10 : 20,
+      maxPoolSize: IS_PROD ? 5 : 20,
       // See api/index.js — frozen serverless sockets die on Atlas's side;
       // expire them client-side so each cold invocation gets a fresh one.
       maxIdleTimeMS: IS_PROD ? 30000 : 0,

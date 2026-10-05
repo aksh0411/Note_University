@@ -24,11 +24,11 @@ const CONNECT_OPTS = {
   autoIndex: false,
   serverSelectionTimeoutMS: 10000,
   socketTimeoutMS: 45000,
-  maxPoolSize: 10,
-  // Vercel freezes idle functions and Atlas silently drops the frozen sockets —
-  // the next thaw then queries a dead socket and spends its heartbeat window
-  // reconnecting (the "before initial connection is complete" 503 storm).
-  // Expiring idle sockets client-side keeps every thaw on a fresh connection.
+  // Serverless: dozens of short-lived instances share the cluster. M0's
+  // connection cap gets slammed when every instance opens 10 sockets, and
+  // Atlas then kills connections mid-request (the flapping 503 storms).
+  // A small pool + client-side idle expiry keeps total connections low.
+  maxPoolSize: 5,
   maxIdleTimeMS: 30000,
   heartbeatFrequencyMS: 5000,
 };
