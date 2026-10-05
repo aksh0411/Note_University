@@ -1444,6 +1444,36 @@ async function sendMsg(prefill) {
       });
       // Fire-and-forget: suggested follow-up chips pop in a couple of seconds later
       loadFollowupChips(val, data.reply, subj);
+    } else if (res.status === 503) {
+      // Cold instance / database warming — retry once quietly instead of
+      // showing the server's 503 text as if the AI had said it.
+      await new Promise(r => setTimeout(r, 1500));
+      if (chatAbortedByUser) return;
+      const retryRes = await fetch(`${API_BASE}/api/chat/ask`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ message: val, subject: subj, detailed: !chatQuickMode }),
+        signal: currentChatAbortController.signal
+      });
+      if (chatAbortedByUser) return;
+      const retryData = await retryRes.json().catch(() => ({}));
+      if (retryRes.ok && retryData.reply) {
+        botChatData.push({
+          who: "Noteversity AI",
+          text: retryData.reply,
+          sources: retryData.sources || [],
+          me: false,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        loadFollowupChips(val, retryData.reply, subj);
+      } else {
+        botChatData.push({
+          who: "Noteversity AI",
+          text: "I'm still waking up on the server — please send your question again in a few seconds.",
+          me: false,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+      }
     } else {
       botChatData.push({
         who: "Noteversity AI",
