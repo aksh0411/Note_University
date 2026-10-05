@@ -25,6 +25,12 @@ const CONNECT_OPTS = {
   serverSelectionTimeoutMS: 10000,
   socketTimeoutMS: 45000,
   maxPoolSize: 10,
+  // Vercel freezes idle functions and Atlas silently drops the frozen sockets —
+  // the next thaw then queries a dead socket and spends its heartbeat window
+  // reconnecting (the "before initial connection is complete" 503 storm).
+  // Expiring idle sockets client-side keeps every thaw on a fresh connection.
+  maxIdleTimeMS: 30000,
+  heartbeatFrequencyMS: 5000,
 };
 
 let cached = global.mongoose;

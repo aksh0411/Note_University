@@ -29,6 +29,10 @@ async function connectDB() {
       serverSelectionTimeoutMS: IS_PROD ? 10000 : 2500,
       socketTimeoutMS: 45000,
       maxPoolSize: IS_PROD ? 10 : 20,
+      // See api/index.js — frozen serverless sockets die on Atlas's side;
+      // expire them client-side so each cold invocation gets a fresh one.
+      maxIdleTimeMS: IS_PROD ? 30000 : 0,
+      heartbeatFrequencyMS: IS_PROD ? 5000 : 10000,
       bufferCommands: false,
       autoIndex: false,
     });
