@@ -1968,12 +1968,23 @@ async function exitAdmin() {
   try {
     await fetch(`${API_BASE}/api/auth/admin/logout`, { method: 'POST', credentials: 'include' });
   } catch (e) { /* proceed regardless */ }
-  // The guest session cookie is still valid — restore it; mint one if expired.
+  // The guest session cookie is usually still valid — restore it. A transient
+  // 503 (cold serverless instance) gets a few retries instead of kicking the
+  // user to the boot-error screen mid-session.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const user = await fetchSessionUser();
+      if (user) { enterApp(user); return; }
+      break; // genuinely no session left — mint a fresh guest below
+    } catch (e) {
+      if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+    }
+  }
   try {
-    const user = await fetchSessionUser();
-    if (user) { enterApp(user); return; }
-  } catch (e) { /* fall through */ }
-  guestSessionAndEnter().catch(() => showBootError());
+    await guestSessionAndEnter();
+  } catch (e) {
+    showBootError(); // server truly unreachable — the Retry button re-boots
+  }
 }
 
 function togglePasswordVisibility(inputId, btn) {
