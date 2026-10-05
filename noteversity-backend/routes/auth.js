@@ -16,7 +16,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const { syncUsersToJson } = require('../services/jsonStore');
 const { jwtSecret, IS_PROD, GUEST_SESSION_TTL, ADMIN_SESSION_TTL, GUEST_COOKIE_MAX_AGE, ADMIN_COOKIE_MAX_AGE } = require('../config/env');
-const { waitForDb, isDbUnavailable } = require('../config/db');
+const { waitForDb, isDbUnavailable, getReadyConnection } = require('../config/db');
 
 const router = express.Router();
 
@@ -73,7 +73,7 @@ router.post('/guest-session', async (req, res) => {
     }
 
     const suffix = crypto.randomBytes(4).toString('hex');
-    if (mongoose.connection.readyState !== 1 && !(await waitForDb())) {
+    if (mongoose.connection.readyState !== 1 && !(await getReadyConnection())) {
       const connectDB = require('../config/db');
       await connectDB();
     }
@@ -118,7 +118,7 @@ router.get('/me', async (req, res) => {
         decoded = jwt.verify(adminToken, jwtSecret());
       } catch (e) { decoded = null; /* bad/expired admin token — fall through to guest */ }
       if (decoded && decoded.typ === 'admin' && decoded.userId) {
-        if (mongoose.connection.readyState !== 1) await waitForDb();
+        if (mongoose.connection.readyState !== 1 && !(await getReadyConnection())) return sessionLookupError(new Error('db-not-ready'));
         try {
           const admin = await User.findById(decoded.userId);
           if (admin) return res.json({ user: displayUser(admin) });
@@ -137,7 +137,7 @@ router.get('/me', async (req, res) => {
       } catch (e) {
         return res.status(401).json({ message: 'No active session' });
       }
-      if (mongoose.connection.readyState !== 1) await waitForDb();
+      if (mongoose.connection.readyState !== 1 && !(await getReadyConnection())) return sessionLookupError(new Error('db-not-ready'));
       try {
         const user = await User.findById(decoded.userId);
         if (user) return res.json({ user: displayUser(user) });
@@ -179,7 +179,7 @@ router.post('/admin/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid admin credentials' });
     }
 
-    if (mongoose.connection.readyState !== 1 && !(await waitForDb())) {
+    if (mongoose.connection.readyState !== 1 && !(await getReadyConnection())) {
       const connectDB = require('../config/db');
       await connectDB();
     }

@@ -91,6 +91,71 @@ function isDbUnavailable(err) {
   ].includes(err.name) || /topology|connection/i.test(err.message || '');
 }
 
+/**
+ * Single source of truth for getting a USABLE database connection in
+ * serverless environments. Handles the three failure modes we have observed:
+ *   1. no connection yet            → connect
+ *   2. connection attempt in flight → wait for it
+ *   3. zombie topology (an old pool stuck "reconnecting" after Vercel froze
+ *      the instance and Atlas dropped its sockets) → hard disconnect and dial
+ *      a brand-new connection instead of waiting forever.
+ */
+let connectPromise = null;
+
+function connectOptions() {
+  return {
+    serverSelectionTimeoutMS: IS_PROD ? 10000 : 2500,
+    socketTimeoutMS: 45000,
+    maxPoolSize: IS_PROD ? 5 : 20,
+    // Frozen serverless sockets die on Atlas's side; expire them client-side
+    // so each thawed instance uses a fresh connection.
+    maxIdleTimeMS: IS_PROD ? 30000 : 0,
+    heartbeatFrequencyMS: IS_PROD ? 5000 : 10000,
+    bufferCommands: false,
+    autoIndex: false,
+  };
+}
+
+async function getReadyConnection(maxWaitMs = 9000) {
+  if (mongoose.connection.readyState === 1) return true;
+
+  if (mongoose.connection.readyState === 0 || !connectPromise) {
+    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/noteversity';
+    connectPromise = mongoose.connect(mongoUri, connectOptions());
+    try {
+      await connectPromise;
+    } catch (err) {
+      connectPromise = null;
+      throw err;
+    }
+  } else {
+    try {
+      await connectPromise;
+    } catch (e) { connectPromise = null; }
+  }
+
+  if (mongoose.connection.readyState === 1) return true;
+
+  // Not ready yet — give an in-flight reconnect a short window…
+  const ready = await waitForDb(Math.min(4000, maxWaitMs));
+  if (ready) return true;
+
+  // …then hard-reset the zombie topology and dial fresh.
+  console.warn('[DB] Connection stuck in state', mongoose.connection.readyState, '— hard-resetting');
+  try { await mongoose.disconnect(); } catch (e) { /* ignore */ }
+  connectPromise = null;
+  const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/noteversity';
+  connectPromise = mongoose.connect(mongoUri, connectOptions());
+  try {
+    await connectPromise;
+  } catch (err) {
+    connectPromise = null;
+    throw err;
+  }
+  return mongoose.connection.readyState === 1;
+}
+
 module.exports = connectDB;
 module.exports.waitForDb = waitForDb;
 module.exports.isDbUnavailable = isDbUnavailable;
+module.exports.getReadyConnection = getReadyConnection;

@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const { jwtSecret } = require('../config/env');
-const { waitForDb, isDbUnavailable } = require('../config/db');
+const { waitForDb, isDbUnavailable, getReadyConnection } = require('../config/db');
 
 /**
  * Session resolution order: Authorization header (API testing) →
@@ -41,7 +41,9 @@ async function requireAuth(req, res, next) {
   }
 
   try {
-    if (mongoose.connection.readyState !== 1) await waitForDb();
+    if (mongoose.connection.readyState !== 1 && !(await getReadyConnection())) {
+      return res.status(503).json({ message: 'Database is warming up. Please try again.' });
+    }
     const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(401).json({ message: 'User account no longer exists.' });
