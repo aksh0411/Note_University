@@ -1788,9 +1788,20 @@ async function bootIntoApp() {
   } catch (e) {}
 
   let user = null;
-  try {
-    user = await fetchSessionUser();
-  } catch (err) {
+  // Cold serverless instances may 503 for a few seconds right after a deploy
+  // while the database connection warms up — retry through it (the Retry
+  // button below re-runs this same boot flow).
+  let bootErr = null;
+  for (let attempt = 0; attempt < 3 && !user; attempt++) {
+    try {
+      user = await fetchSessionUser();
+      bootErr = null;
+    } catch (err) {
+      bootErr = err;
+      if (attempt < 2) await new Promise(r => setTimeout(r, 1500 + attempt * 1500));
+    }
+  }
+  if (bootErr) {
     // Server unreachable — nothing will work; show the retry screen.
     showBootError();
     return;

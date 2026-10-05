@@ -15,8 +15,17 @@ mongoose.set('bufferCommands', false);
 mongoose.set('autoIndex', false);
 
 const app = require('../noteversity-backend/app');
+const { waitForDb } = require('../noteversity-backend/config/db');
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/noteversity';
+
+const CONNECT_OPTS = {
+  bufferCommands: false,
+  autoIndex: false,
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  maxPoolSize: 10,
+};
 
 let cached = global.mongoose;
 if (!cached) {
@@ -24,18 +33,10 @@ if (!cached) {
 }
 
 async function ensureDb() {
-  if (cached.conn && mongoose.connection.readyState === 1) {
-    return cached.conn;
-  }
+  if (mongoose.connection.readyState === 1) return mongoose.connection;
 
   if (!cached.promise || mongoose.connection.readyState === 0) {
-    cached.promise = mongoose.connect(MONGO_URI, {
-      bufferCommands: false,
-      autoIndex: false,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-    }).then((m) => {
+    cached.promise = mongoose.connect(MONGO_URI, CONNECT_OPTS).then((m) => {
       console.log('MongoDB connected successfully');
       return m;
     });
@@ -50,7 +51,15 @@ async function ensureDb() {
     throw err;
   }
 
-  return cached.conn;
+  // An existing connection can be mid-reconnect (readyState 2) after an idle
+  // gap — wait for it instead of serving requests against a half-open socket
+  // (which surfaced as "insertOne before initial connection is complete").
+  if (mongoose.connection.readyState !== 1) {
+    const ready = await waitForDb(10000);
+    if (!ready) throw new Error('MongoDB connection did not become ready in time');
+  }
+
+  return mongoose.connection;
 }
 
 module.exports = async (req, res) => {
