@@ -32,12 +32,23 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-src 'self' about:; frame-ancestors 'self'; object-src 'self'; base-uri 'self'; form-action 'self'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'; frame-src 'self' about:; frame-ancestors 'self'; object-src 'self'; base-uri 'self'; form-action 'self'");
   next();
 });
 
+// CORS: same-origin app, so cross-origin access is allowlisted instead of
+// reflected. Requests without an Origin header (same-site, curl, health
+// checks) pass through untouched.
+const ALLOWED_ORIGINS = [
+  'https://note-university.vercel.app', // update if the site domain ever changes
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
+];
 const corsOptions = {
-  origin: true,
+  origin(origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(null, false); // no CORS grant — browser blocks the response
+  },
   credentials: true,
 };
 
