@@ -78,10 +78,6 @@
   .nav-tab.active::after{
     content:"";position:absolute;right:-8px;top:0;bottom:0;width:8px;background:var(--paper);
   }
-  .nav-tab .badge{
-    margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;
-    padding:1px 6px;border-radius:20px;
-  }
   .sidebar-user{
     padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08);
     display:flex;align-items:center;gap:10px;
@@ -106,11 +102,6 @@
   }
   .search-box input{border:none;outline:none;flex:1;font-size:13.5px;background:transparent;}
   .search-box .ic{color:var(--text-faint);}
-  .stamp-badge{
-    margin-left:auto;display:flex;align-items:center;gap:6px;
-    font-size:11px;font-weight:600;color:var(--green);background:var(--green-soft);
-    padding:5px 10px;border-radius:20px;
-  }
 
   .view{padding:22px 28px;flex:1;min-height:0;overflow-y:auto;}
   .view{display:none;}
@@ -437,14 +428,6 @@
     animation: appEnterAnim 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-  /* ---------- LOGOUT BUTTON ---------- */
-  .btn-logout{
-    display:flex;align-items:center;gap:8px;padding:10px 20px;margin:0 8px 14px;
-    font-size:12.5px;font-weight:600;color:#C9C3B4;background:none;border:1px solid rgba(255,255,255,0.12);
-    border-radius:3px;cursor:pointer;transition:background .12s,color .12s;
-  }
-  .btn-logout:hover{background:rgba(255,255,255,0.08);color:#fff;}
-
   /* ---------- MOBILE / RESPONSIVE ---------- */
   .sidebar-toggle{
     display:none;background:#fff;border:1.5px solid var(--rule);border-radius:4px;
@@ -521,7 +504,6 @@
     background:linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.13) 37%, rgba(255,255,255,0.05) 63%);
     background-size:400% 100%;
   }
-  body.dark .stamp-badge{ color:#7FD1A0; background:rgba(46,139,87,0.16); }
   body.dark .qlink .tag{ background:rgba(30,157,178,0.16); }
   body.dark .drop-zone.dragover{ background:rgba(30,157,178,0.10); }
   body.dark .pw-toggle:hover{ color:var(--head); background:rgba(30,157,178,0.12); }
@@ -714,7 +696,7 @@
     <div class="field"><label>File (PDF)</label>
       <div id="dropZone" class="drop-zone" onclick="document.getElementById('upFile').click()">
         <span id="dropZoneText">📥 Drag &amp; drop a PDF here, or click to browse</span>
-        <input type="file" id="upFile" accept=".pdf,.doc,.docx" hidden>
+        <input type="file" id="upFile" accept=".pdf" hidden>
       </div>
       <div id="uploadProgressWrap" style="display:none; margin-top:10px;">
         <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-soft); margin-bottom:4px;"><span>Uploading…</span><span id="uploadPct">0%</span></div>
@@ -736,6 +718,7 @@
     <div style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--rule); flex-shrink:0;">
       <span id="previewTitle" style="flex:1; font-weight:700; color:var(--head); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
       <a id="previewOpenTab" href="#" target="_blank" class="toolbar-btn" style="text-decoration:none; display:inline-flex; align-items:center;">↗ Open in new tab</a>
+      <button class="toolbar-btn" onclick="copyLink(currentPreviewFileUrl)">🔗 Copy link</button>
       <button class="toolbar-btn" onclick="closePreview()">✕ Close</button>
     </div>
     <iframe id="previewFrame" src="about:blank" style="flex:1; width:100%; border:none; background:#fff;" title="PDF preview"></iframe>
@@ -788,10 +771,6 @@ function safeSet(k, v) {
  */
 let currentUser = null;
 
-function getAuthHeaders(extra = {}) {
-  return Object.assign({}, extra);
-}
-
 /* ---------------- DATA ---------------- */
 const subjects = [
   {name:"Design & Analysis of Algorithms", code:"DAA", color:"#0A4D68"},
@@ -838,9 +817,7 @@ function switchView(name){
 /* ---------------- DASHBOARD ---------------- */
 async function renderDashboard(){
   try {
-    const res = await fetch(`${API_BASE}/api/dashboard`, {
-      headers: getAuthHeaders()
-    });
+    const res = await fetch(`${API_BASE}/api/dashboard`);
     if(res.ok){
       const data = await res.json();
       
@@ -927,7 +904,7 @@ async function fetchNotes(){
     if(notesFilter !== "All") url += `subject=${encodeURIComponent(notesFilter)}&`;
     if(notesSearch) url += `search=${encodeURIComponent(notesSearch)}&`;
 
-    let res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
+    let res = await fetchWithTimeout(url, { credentials: 'include' });
     // 401 = session recovery, 503 = cold database — both get one retry instead
     // of leaving a stuck skeleton (which looked like "half the PDFs missing").
     if (res.status === 401 || res.status === 503) {
@@ -936,7 +913,7 @@ async function fetchNotes(){
       } else {
         await new Promise(r => setTimeout(r, 1200));
       }
-      res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
+      res = await fetchWithTimeout(url, { credentials: 'include' });
     }
     if(res.ok){
       notes = await res.json();
@@ -945,7 +922,7 @@ async function fetchNotes(){
       updateTotalResStat();
     } else if (res.status === 401) {
       await refreshGuestSession();
-      const retryRes = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
+      const retryRes = await fetchWithTimeout(url, { credentials: 'include' });
       if (retryRes.ok) {
         notes = await retryRes.json();
         renderNotes();
@@ -982,7 +959,7 @@ function renderNotes(){
       <div class="doc-foot">
         <span class="doc-dl">⬇ ${n.downloads || 0}</span>
         <div style="display:flex;gap:6px;">
-          <button class="doc-btn" style="background:var(--amber-dark);" title="Preview" onclick="openPreview('${n.fileUrl}', '${escapeHtml(n.title)}')">👁</button>
+          <button class="doc-btn" title="Copy shareable link" onclick="copyLink('${n.fileUrl}')">🔗</button><button class="doc-btn" style="background:var(--amber-dark);" title="Preview" onclick="openPreview('${n.fileUrl}', '${escapeHtml(n.title)}')">👁</button>
           <button class="doc-btn" onclick="downloadItem('${n._id}', '${escapeHtml(n.title)}', 'note')">Download</button>
           ${admin ? `<button class="doc-btn" style="background:var(--red);" title="Delete file" onclick="deleteItem('${n._id}', '${escapeHtml(n.title)}', 'note')">🗑️</button>` : ''}
         </div>
@@ -1003,14 +980,14 @@ async function fetchPyqs(){
     if(pyqFilter !== "All") url += `subject=${encodeURIComponent(pyqFilter)}&`;
     if(pyqSearch) url += `search=${encodeURIComponent(pyqSearch)}&`;
 
-    let res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
+    let res = await fetchWithTimeout(url, { credentials: 'include' });
     if (res.status === 401 || res.status === 503) {
       if (res.status === 401) {
         await refreshGuestSession();
       } else {
         await new Promise(r => setTimeout(r, 1200));
       }
-      res = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
+      res = await fetchWithTimeout(url, { credentials: 'include' });
     }
     if(res.ok){
       pyqs = await res.json();
@@ -1019,7 +996,7 @@ async function fetchPyqs(){
       updateTotalResStat();
     } else if (res.status === 401) {
       await refreshGuestSession();
-      const retryRes = await fetchWithTimeout(url, { headers: getAuthHeaders(), credentials: 'include' });
+      const retryRes = await fetchWithTimeout(url, { credentials: 'include' });
       if (retryRes.ok) {
         pyqs = await retryRes.json();
         renderPyqs();
@@ -1056,7 +1033,7 @@ function renderPyqs(){
       <div class="doc-foot">
         <span class="doc-dl">⬇ ${n.downloads || 0}</span>
         <div style="display:flex;gap:6px;">
-          <button class="doc-btn" style="background:var(--amber-dark);" title="Preview" onclick="openPreview('${n.fileUrl}', '${escapeHtml(n.title)}')">👁</button>
+          <button class="doc-btn" title="Copy shareable link" onclick="copyLink('${n.fileUrl}')">🔗</button><button class="doc-btn" style="background:var(--amber-dark);" title="Preview" onclick="openPreview('${n.fileUrl}', '${escapeHtml(n.title)}')">👁</button>
           <button class="doc-btn" onclick="downloadItem('${n._id}', '${escapeHtml(n.title)}', 'pyq')">Download</button>
           ${admin ? `<button class="doc-btn" style="background:var(--red);" title="Delete file" onclick="deleteItem('${n._id}', '${escapeHtml(n.title)}', 'pyq')">🗑️</button>` : ''}
         </div>
@@ -1069,8 +1046,7 @@ async function downloadItem(id, title, type = 'note'){
   try {
     const endpoint = type === 'pyq' ? `/api/pyqs/${id}/download` : `/api/notes/${id}/download`;
     const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers: getAuthHeaders()
+      method: 'POST'
     });
     if(res.ok){
       const data = await res.json();
@@ -1105,8 +1081,7 @@ async function deleteItem(id, title, type = 'note'){
   try {
     const endpoint = type === 'pyq' ? `/api/pyqs/${id}` : `/api/notes/${id}`;
     const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
+      method: 'DELETE'
     });
     if(res.ok){
       showToast("Deleted: " + title);
@@ -1122,7 +1097,7 @@ async function deleteItem(id, title, type = 'note'){
   }
 }
 
-/* ---------------- CHAT & SOCKET.IO ---------------- */
+/* ---------------- CHATBOT ---------------- */
 /* ---------------- CHAT ---------------- */
 
 let isChatBotTyping = false;
@@ -1216,9 +1191,7 @@ function askStarter(question, subj) {
 
 async function loadChatHistory() {
   try {
-    var res = await fetch(API_BASE + '/api/chat/history', {
-      headers: getAuthHeaders()
-    });
+    var res = await fetch(API_BASE + '/api/chat/history');
     if (res.ok) {
       var msgs = await res.json();
       if (Array.isArray(msgs)) {
@@ -1240,8 +1213,7 @@ async function clearChatHistory() {
   updateChatStat();
   try {
     await fetch(API_BASE + '/api/chat/history', {
-      method: 'DELETE',
-      headers: getAuthHeaders()
+      method: 'DELETE'
     });
     showToast('Conversation cleared');
   } catch (e) {}
@@ -1432,7 +1404,7 @@ async function sendMsg(prefill) {
   try {
     const res = await fetch(`${API_BASE}/api/chat/ask`, {
       method: 'POST',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: val, subject: subj, detailed: !chatQuickMode }),
       signal: currentChatAbortController.signal
     });
@@ -1457,7 +1429,7 @@ async function sendMsg(prefill) {
       if (chatAbortedByUser) return;
       const retryRes = await fetch(`${API_BASE}/api/chat/ask`, {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: val, subject: subj, detailed: !chatQuickMode }),
         signal: currentChatAbortController.signal
       });
@@ -1514,7 +1486,7 @@ async function loadFollowupChips(question, answer, subject) {
   try {
     const res = await fetch(`${API_BASE}/api/chat/suggest`, {
       method: 'POST',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, answer, subject })
     });
     if (!res.ok) return;
@@ -1534,9 +1506,22 @@ function sendFollowup(i) {
 
 /* ---------------- UPLOAD MODAL ---------------- */
 let uploadKind = 'note';
+let currentPreviewFileUrl = '';
+/* Copy a shareable document link — PDFs are public, so the link works for
+   anyone in any browser. */
+async function copyLink(fileUrl){
+  try {
+    await navigator.clipboard.writeText(location.origin + fileUrl);
+    showToast('🔗 Link copied — share it with your class!');
+  } catch (e) {
+    showToast('Could not copy automatically — the link is: ' + location.origin + fileUrl);
+  }
+}
+
 function openPreview(fileUrl, title){
   // Same-origin: the browser sends the session cookies automatically
   const src = `${API_BASE}${fileUrl}`;
+  currentPreviewFileUrl = fileUrl;
   document.getElementById('previewTitle').textContent = title || 'Preview';
   document.getElementById('previewFrame').src = src;
   document.getElementById('previewOpenTab').href = src;

@@ -11,7 +11,6 @@ const fs = require('fs');
 const multer = require('multer');
 const cookieParser = require('cookie-parser');
 
-const requireAuth = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
 const pyqsRoutes = require('./routes/pyqs');
@@ -56,9 +55,10 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
-// Uploaded notes/PYQs require a signed-in session (cookie or Bearer/`?token=`
-// for API clients). Filenames are sanitized against path traversal.
-app.get('/uploads/:filename', requireAuth, async (req, res) => {
+// Uploaded notes/PYQs are public study material: any visitor can open a
+// shared link directly (the site itself is zero-login). Filenames are
+// sanitized against path traversal.
+app.get('/uploads/:filename', async (req, res) => {
   try {
     const filename = path.basename(req.params.filename);
     const stream = await storage.getPdfStream(filename);

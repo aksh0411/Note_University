@@ -8,12 +8,14 @@ const path = require('path');
  */
 const storage = multer.memoryStorage();
 
-const allowedTypes = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.jpg', '.png'];
+// The library is PDF-only: previews, downloads, and text extraction all
+// assume PDFs, and a stray image/doc would render as a broken card.
+const allowedTypes = ['.pdf'];
 
 function fileFilter(req, file, cb) {
   const ext = path.extname(file.originalname).toLowerCase();
   if (allowedTypes.includes(ext)) cb(null, true);
-  else cb(new Error('Unsupported file type. Allowed: ' + allowedTypes.join(', ')));
+  else cb(new Error('Unsupported file type. Only PDF files are allowed.'));
 }
 
 const upload = multer({

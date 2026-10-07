@@ -26,7 +26,10 @@ router.get('/', requireAuth, async (req, res) => {
     if (branch) filter.branch = branch;
     if (year && !Number.isNaN(Number(year))) filter.year = Number(year);
     if (examType) filter.examType = examType;
-    if (search) filter.title = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    if (search) {
+      const rx = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+      filter.$or = [{ title: rx }, { extractedText: rx }];
+    }
 
     const pyqs = await Pyq.find(filter).select('-extractedText').populate('uploadedBy', 'name').sort({ year: -1 });
     res.json(pyqs);

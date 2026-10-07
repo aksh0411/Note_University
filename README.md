@@ -220,16 +220,14 @@ note/
     │   ├── User.js                   # Mongoose schema for User profiles
     │   ├── Note.js                   # Mongoose schema for Course Notes
     │   ├── Pyq.js                    # Mongoose schema for Previous Year Question papers
-    │   └── Message.js                # Mongoose schema for legacy chat messages
-    │
+        │
     ├── routes/
-    │   ├── auth.js                   # Signup, Login, Demo-Session, and OTP endpoints
+    │   ├── auth.js                   # Guest sessions, /me, admin login/logout
     │   ├── notes.js                  # Notes listing, upload, delete, download tracking
     │   ├── pyqs.js                   # PYQs listing, upload, delete, download tracking
     │   ├── chat.js                   # AI Query (/ask), History (/history), and clear
     │   ├── dashboard.js              # User statistics and analytical metrics
-    │   └── upload.js                 # Direct file upload handlers
-    │
+        │
     ├── services/
     │   ├── aiService.js              # PDF text extractor, intent filter, Gemini RAG engine
     │   └── jsonStore.js              # File-system read/write persistence coordinator
@@ -246,7 +244,6 @@ note/
 - **HTML5 / Vanilla CSS3 / Modern JavaScript (ES6+)**: Zero bulky frameworks for instant load times and lightweight footprint.
 - **KaTeX 0.16.11**: High-performance browser rendering for LaTeX math notation, recurrences, and formulas.
 - **Google Web Fonts**: Clean typography using `Space Grotesk`, `IBM Plex Sans`, and `IBM Plex Mono`.
-- **Socket.io Client**: Real-time communication support.
 
 ### Backend
 - **Node.js & Express 4**: RESTful API server and static asset delivery.
@@ -254,7 +251,7 @@ note/
 - **`pdf-parse` (v2)**: High-speed server-side PDF document text extraction.
 - **Mongoose 8 & `mongodb-memory-server`**: Object Document Mapping with zero-config embedded database.
 - **JSON Persistent Store**: Atomic filesystem synchronization for restart safety.
-- **JSON Web Tokens (JWT) & Bcrypt.js**: Secure token-based authentication and salted password hashing.
+- **JSON Web Tokens (JWT) & Bcrypt.js**: HttpOnly cookie sessions (guest + admin) and salted password hashing.
 - **Multer**: Multi-part form data handler for PDF uploads.
 - **CORS & Dotenv**: Cross-origin resource sharing and environment management.
 

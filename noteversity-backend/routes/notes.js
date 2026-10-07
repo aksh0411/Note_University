@@ -25,7 +25,12 @@ router.get('/', requireAuth, async (req, res) => {
     if (subject) filter.subject = subject;
     if (semester && !Number.isNaN(Number(semester))) filter.semester = Number(semester);
     if (branch) filter.branch = branch;
-    if (search) filter.title = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    if (search) {
+      const rx = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+      // Search inside the documents too, not just titles — students look up
+      // topics ("knapsack"), not file names.
+      filter.$or = [{ title: rx }, { extractedText: rx }];
+    }
 
     const notes = await Note.find(filter).select('-extractedText').populate('uploadedBy', 'name').sort({ createdAt: -1 });
     res.json(notes);

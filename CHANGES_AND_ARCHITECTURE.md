@@ -25,22 +25,7 @@ This document provides a comprehensive breakdown of **every file changed**, **ev
 
 ### File 1: `noteversity-backend/.env` (NEW)
 * **What was done:** Created the `.env` file from `.env.example`.
-* **Code contents:**
-  ```ini
-  PORT=5000
-  CLIENT_URL=*
-  MONGO_URI=mongodb://127.0.0.1:27017/noteversity
-  JWT_SECRET=noteversity_dev_secret_key_2026_jwt_token_secure
-  JWT_EXPIRES_IN=7d
-  OTP_EXPIRY_MINUTES=10
-  ALLOWED_EMAIL_DOMAIN=paruluniversity.ac.in
-  SMTP_HOST=smtp.gmail.com
-  SMTP_PORT=587
-  SMTP_USER=dev@noteversity.app
-  SMTP_PASS=devpassword
-  SMTP_FROM="Noteversity <no-reply@noteversity.app>"
-  ```
-* **How it works:** `server.js` starts with `require('dotenv').config()`. This injects these variables into `process.env`, enabling JWT generation, route configurations, and email settings.
+* **Note:** Values are intentionally omitted here — real secrets and configuration never belong in documentation or in git. See `.env.example` for the variable names.
 
 ---
 
